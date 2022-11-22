@@ -9,6 +9,7 @@
 #include<errno.h>
 #include<string.h>
 #include<time.h>
+#include <sys/time.h> 
 #define handle_error_en(en, msg) \
                do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
 typedef struct {
@@ -16,9 +17,11 @@ typedef struct {
     int thread_num;
     int sched_policy;
     int sched_priority;
+    float time_wait;
 } thread_info_t;
 int  check_policy(char* command);
 pthread_barrier_t barrier;
+
 void *thread_func(void *arg)
 {
     /* 1. Wait until all threads are ready */
@@ -27,16 +30,38 @@ void *thread_func(void *arg)
     
     thread_info_t* thread_data;
     thread_data=(thread_info_t*) arg;
+    //printf("nowtime=%f",thread_data->time_wait);
     pthread_barrier_wait(&barrier);
     //printf("---------------thread init work(%ld)--------------\n", time(NULL));
 
     /* 2. Do the task */ 
     for (int i = 0; i < 3; i++) {
+    
         printf("Thread %d is running\n", thread_data->thread_num);
-        sched_yield();
+        struct timeval start, current;
+        double starttime,currenttime;
         
+        gettimeofday( &start, NULL );
+        //printf("start : %ld.%ld\n", start.tv_sec, start.tv_usec);
+        starttime=(start.tv_sec*1000000+start.tv_usec);
+        starttime/=1000000;
 
-        /* Busy for <time_wait> seconds */
+        //printf("%f\n",starttime);
+        
+        //currenttime=current.tv_sec*1000000+current.tv_sec;
+        while (1)
+        {
+            gettimeofday( &current, NULL );
+            currenttime=(current.tv_sec*1000000+current.tv_usec);
+            currenttime/=1000000;
+
+            if (currenttime>starttime+thread_data->time_wait)
+                break;
+        }
+        
+        sched_yield();
+    
+    /* Busy for <time_wait> seconds */
     }
     /* 3. Exit the function  */
     //printf("--------------thread stop work(%ld)--------------\n", time(NULL));
@@ -44,7 +69,8 @@ void *thread_func(void *arg)
 }
 int main (int argc,char *argv[]){
     //printf("%s",*argv);
-    char* optstring="n:ts:p:";
+    char* optstring="n:t:s:p:";
+    float time;
     int c=0;
     int paramquantity=atoi(argv[2]);
     int policyarr[paramquantity];
@@ -56,12 +82,13 @@ int main (int argc,char *argv[]){
     while((c=getopt(argc,argv,optstring))!=-1){
         switch (c)
         {
-        case 'n':
-            //printf("argument number:%s\n",optarg);
-            break; 
-        case 't':
-            //printf("this is time\n");
+        case 'n':{
+            
+            break;} 
+        case 't':{
+            time=atof(optarg);
             break;
+        }
         case 's':{
             s1=optarg;
             p=strtok(s1,d);
@@ -137,6 +164,7 @@ int main (int argc,char *argv[]){
         // if(policy==SCHED_OTHER)
         //     printf("Schedpolicy:SCHED_OTHER\n"); 
         thread_info[i].thread_num=i;
+        thread_info[i].time_wait=time;
         params[i].sched_priority=priorityarr[i];
         if (priorityarr[i]!=-1)
         {   
